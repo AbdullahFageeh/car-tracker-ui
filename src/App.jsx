@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { MapContainer, TileLayer, Marker, Popup, Circle, Polyline, Polygon, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import { vehicles as initialVehicles } from './data/vehicles'
-import { zones } from './data/zones'
+import { zones as initialZones } from './data/zones'
 import { saudiBorder } from './data/saudiBorder'
 import Sidebar from './components/Sidebar'
 import VehicleDetail from './components/VehicleDetail'
@@ -12,6 +12,7 @@ import MaintenancePanel from './components/MaintenancePanel'
 import CustomersPage from './components/CustomersPage'
 import PlaybackPanel from './components/PlaybackPanel'
 import MasterDashboard from './components/MasterDashboard'
+import { ZoneDrawHandler, ZoneSaveDialog } from './components/ZoneDrawing'
 import AccountSettings from './components/AccountSettings'
 import Login from './components/Login'
 import { useLiveMovement } from './hooks/useLiveMovement'
@@ -58,6 +59,10 @@ function App() {
   const [overlay, setOverlay] = useState(null) // 'alerts' | 'maintenance' | 'customers' | 'account' | null
   const [vehicleOverrides, setVehicleOverrides] = useState({})
   const [zoneToast, setZoneToast] = useState(null)
+  const [zones, setZones] = useState(initialZones)
+  const [drawMode, setDrawMode] = useState(null) // null | 'pickCenter' | 'pickRadius'
+  const [draftZone, setDraftZone] = useState(null) // { lat, lng, radius }
+  const [showZoneDialog, setShowZoneDialog] = useState(false)
   const [route, setRoute] = useState(null) // { vehicleId, date, points, stats, vehicle }
   const [playbackIndex, setPlaybackIndex] = useState(0)
   const [isPlaying, setIsPlaying] = useState(false)
@@ -179,6 +184,16 @@ function App() {
           selectedId={selected?.id}
           tab={tab}
           onTabChange={setTab}
+          drawMode={drawMode}
+          onStartDraw={() => {
+            setDrawMode('pickCenter')
+            setDraftZone(null)
+          }}
+          onCancelDraw={() => {
+            setDrawMode(null)
+            setDraftZone(null)
+          }}
+          onDeleteZone={(id) => setZones((z) => z.filter((zone) => zone.id !== id))}
         />
 
         <div className="flex-1 h-full relative">
@@ -193,6 +208,32 @@ function App() {
             />
 
             <FlyToVehicle vehicle={selected} />
+
+            {/* Zone drawing handler (only listens during draw mode) */}
+            {drawMode && (
+              <ZoneDrawHandler
+                drawMode={drawMode}
+                draftZone={draftZone}
+                setDraftZone={setDraftZone}
+                setDrawMode={setDrawMode}
+                onComplete={() => setShowZoneDialog(true)}
+              />
+            )}
+
+            {/* Draft zone preview while drawing */}
+            {draftZone && (
+              <Circle
+                center={[draftZone.lat, draftZone.lng]}
+                radius={draftZone.radius}
+                pathOptions={{
+                  color: '#3b82f6',
+                  fillColor: '#3b82f6',
+                  fillOpacity: 0.2,
+                  weight: 2,
+                  dashArray: '6 4',
+                }}
+              />
+            )}
 
             {/* Saudi country border (visual outline for country-wide vehicles) */}
             <Polygon
@@ -329,6 +370,48 @@ function App() {
           />
         )}
       </div>
+
+      {/* Drawing mode banner */}
+      {drawMode && (
+        <div className="fixed top-16 left-1/2 -translate-x-1/2 z-[1500] bg-blue-600 text-white px-4 py-2 rounded-full shadow-lg text-sm font-medium flex items-center gap-3">
+          {drawMode === 'pickCenter' ? (
+            <>
+              📍 Click on the map to place the zone center
+            </>
+          ) : (
+            <>
+              ⭕ Move your mouse to size it, click to confirm
+            </>
+          )}
+          <button
+            onClick={() => {
+              setDrawMode(null)
+              setDraftZone(null)
+            }}
+            className="ml-2 text-blue-100 hover:text-white text-xs underline"
+          >
+            Cancel
+          </button>
+        </div>
+      )}
+
+      {/* Save zone dialog */}
+      {showZoneDialog && (
+        <ZoneSaveDialog
+          draftZone={draftZone}
+          onSave={(newZone) => {
+            setZones((z) => [...z, newZone])
+            setDraftZone(null)
+            setShowZoneDialog(false)
+            setDrawMode(null)
+          }}
+          onCancel={() => {
+            setDraftZone(null)
+            setShowZoneDialog(false)
+            setDrawMode(null)
+          }}
+        />
+      )}
 
       {/* Zone violation toast */}
       {zoneToast && (

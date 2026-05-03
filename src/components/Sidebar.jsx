@@ -1,4 +1,4 @@
-import { Car, Gauge, User, Shield, MapPin, AlertTriangle } from 'lucide-react'
+import { Car, Gauge, User, Shield, MapPin, AlertTriangle, Plus, Trash2 } from 'lucide-react'
 import { vehicleStatus } from '../data/zones'
 
 export default function Sidebar({
@@ -8,6 +8,10 @@ export default function Sidebar({
   selectedId,
   tab,
   onTabChange,
+  drawMode,
+  onStartDraw,
+  onCancelDraw,
+  onDeleteZone,
 }) {
   const onlineCount = vehicles.filter((v) => v.engineOn).length
   const outsideCount = vehicles.filter(
@@ -57,7 +61,14 @@ export default function Sidebar({
             selectedId={selectedId}
           />
         ) : (
-          <ZoneList zones={zones} vehicles={vehicles} />
+          <ZoneList
+            zones={zones}
+            vehicles={vehicles}
+            drawMode={drawMode}
+            onStartDraw={onStartDraw}
+            onCancelDraw={onCancelDraw}
+            onDeleteZone={onDeleteZone}
+          />
         )}
       </div>
     </div>
@@ -129,9 +140,34 @@ function VehicleList({ vehicles, zones, onSelect, selectedId }) {
   )
 }
 
-function ZoneList({ zones, vehicles }) {
+function ZoneList({ zones, vehicles, drawMode, onStartDraw, onCancelDraw, onDeleteZone }) {
   return (
     <>
+      {/* Draw zone button */}
+      <div className="p-3 border-b border-slate-800">
+        {drawMode ? (
+          <button
+            onClick={onCancelDraw}
+            className="w-full flex items-center justify-center gap-2 bg-red-500/20 hover:bg-red-500/30 text-red-300 font-medium py-2 rounded-lg text-sm border border-red-500/40"
+          >
+            ✖ Cancel drawing
+          </button>
+        ) : (
+          <button
+            onClick={onStartDraw}
+            className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 rounded-lg text-sm"
+          >
+            <Plus size={14} /> Draw new zone
+          </button>
+        )}
+      </div>
+
+      {zones.length === 0 && (
+        <div className="p-8 text-center text-slate-400 text-sm">
+          No zones yet. Click <span className="text-blue-400 font-medium">Draw new zone</span> above to add one.
+        </div>
+      )}
+
       {zones.map((zone) => {
         const inside = vehicles.filter((v) => {
           // count vehicles inside this specific zone
@@ -150,14 +186,25 @@ function ZoneList({ zones, vehicles }) {
         return (
           <div
             key={zone.id}
-            className="p-4 border-b border-slate-800 hover:bg-slate-800 cursor-pointer"
+            className="p-4 border-b border-slate-800 hover:bg-slate-800 group"
           >
             <div className="flex items-center gap-2 mb-2">
               <span
                 className="w-3 h-3 rounded-full border-2"
                 style={{ borderColor: zone.color, background: zone.color + '40' }}
               />
-              <div className="font-semibold text-sm">{zone.name}</div>
+              <div className="font-semibold text-sm flex-1">{zone.name}</div>
+              {onDeleteZone && (
+                <button
+                  onClick={() => {
+                    if (confirm(`Delete zone "${zone.name}"?`)) onDeleteZone(zone.id)
+                  }}
+                  title="Delete zone"
+                  className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-300 p-1 rounded transition-opacity"
+                >
+                  <Trash2 size={13} />
+                </button>
+              )}
             </div>
             <div className="text-xs text-slate-400 mb-2">{zone.description}</div>
             <div className="flex items-center gap-4 text-xs text-slate-300">
