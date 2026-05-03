@@ -10,6 +10,7 @@ import AlertsPanel from './components/AlertsPanel'
 import MaintenancePanel from './components/MaintenancePanel'
 import CustomersPage from './components/CustomersPage'
 import PlaybackPanel from './components/PlaybackPanel'
+import MasterDashboard from './components/MasterDashboard'
 import AccountSettings from './components/AccountSettings'
 import Login from './components/Login'
 import { useLiveMovement } from './hooks/useLiveMovement'
@@ -113,12 +114,46 @@ function App() {
     return <Login onLogin={setUser} />
   }
 
+  // Master mode: show platform dashboard instead of company app
+  if (user.role === 'master' && !user.impersonating) {
+    return (
+      <MasterDashboard
+        user={user}
+        onOpenCompany={(company) =>
+          setUser({ ...user, impersonating: company })
+        }
+        onLogout={() => {
+          setUser(null)
+          setSelected(null)
+          setOverlay(null)
+        }}
+      />
+    )
+  }
+
   const center = [24.7136, 46.6753]
 
   return (
     <div className="h-screen w-screen flex flex-col">
+      {/* Impersonation banner (only when master is viewing as a company) */}
+      {user.role === 'master' && user.impersonating && (
+        <div className="bg-amber-500 text-amber-950 px-4 py-2 flex items-center justify-between text-sm font-medium">
+          <div className="flex items-center gap-2">
+            👁️ Viewing as <span className="font-bold">{user.impersonating.name}</span>
+            <span className="text-amber-800">· Master mode</span>
+          </div>
+          <button
+            onClick={() => setUser({ ...user, impersonating: null })}
+            className="px-3 py-1 bg-amber-950 text-amber-50 rounded-lg text-xs font-semibold hover:bg-amber-900"
+          >
+            ← Back to Master
+          </button>
+        </div>
+      )}
+
       <TopBar
-        user={user}
+        user={user.impersonating ? { ...user, name: user.impersonating.contact, role: 'admin' } : user}
+        impersonating={user.impersonating}
         onOpen={setOverlay}
         onLogout={() => {
           setUser(null)

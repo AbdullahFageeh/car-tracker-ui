@@ -1,10 +1,16 @@
 import { useState } from 'react'
-import { Car, Lock, User } from 'lucide-react'
+import { Car, Lock, User, Shield, Building2 } from 'lucide-react'
 
 export default function Login({ onLogin }) {
-  const [email, setEmail] = useState('admin@fleet.com')
+  const [accountType, setAccountType] = useState('company') // 'master' | 'company'
+  const [email, setEmail] = useState('admin@riyadhrentals.com')
   const [password, setPassword] = useState('demo123')
   const [error, setError] = useState('')
+
+  const switchType = (type) => {
+    setAccountType(type)
+    setEmail(type === 'master' ? 'master@platform.com' : 'admin@riyadhrentals.com')
+  }
 
   const handleSubmit = (e) => {
     e.preventDefault()
@@ -13,7 +19,20 @@ export default function Login({ onLogin }) {
       return
     }
     // Fake login — backend will replace this
-    onLogin({ name: 'Fleet Manager', email, role: 'admin' })
+    if (accountType === 'master') {
+      onLogin({
+        name: 'Platform Admin',
+        email,
+        role: 'master',
+      })
+    } else {
+      onLogin({
+        name: 'Fleet Manager',
+        email,
+        role: 'admin',
+        companyId: 'co_1', // Riyadh Rentals (demo)
+      })
+    }
   }
 
   return (
@@ -55,9 +74,37 @@ export default function Login({ onLogin }) {
           </div>
 
           <h2 className="text-2xl font-bold text-slate-900 mb-1">Welcome back</h2>
-          <p className="text-slate-500 text-sm mb-6">
+          <p className="text-slate-500 text-sm mb-5">
             Sign in to your dashboard
           </p>
+
+          {/* Account type toggle */}
+          <div className="grid grid-cols-2 gap-2 mb-5 p-1 bg-slate-100 rounded-xl">
+            <button
+              type="button"
+              onClick={() => switchType('company')}
+              className={`flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-colors ${
+                accountType === 'company'
+                  ? 'bg-white text-blue-700 shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Building2 size={14} />
+              Company
+            </button>
+            <button
+              type="button"
+              onClick={() => switchType('master')}
+              className={`flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-colors ${
+                accountType === 'master'
+                  ? 'bg-white text-blue-700 shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Shield size={14} />
+              Master
+            </button>
+          </div>
 
           <label className="block text-xs font-medium text-slate-700 mb-1.5">
             Email

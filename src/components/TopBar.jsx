@@ -2,7 +2,7 @@ import { Bell, Wrench, Users, LogOut, Car, Settings, History } from 'lucide-reac
 import { unreadAlertsCount, criticalAlertsCount } from '../data/alerts'
 import { vehicles, maintenanceStatus } from '../data/vehicles'
 
-export default function TopBar({ user, onOpen, onLogout }) {
+export default function TopBar({ user, onOpen, onLogout, impersonating }) {
   const unread = unreadAlertsCount()
   const critical = criticalAlertsCount()
   const overdue = vehicles.filter((v) => maintenanceStatus(v).status === 'overdue').length
@@ -12,6 +12,15 @@ export default function TopBar({ user, onOpen, onLogout }) {
       <div className="flex items-center gap-2 font-bold">
         <Car size={20} />
         <span>Fleet Tracker</span>
+        {impersonating && (
+          <>
+            <span className="text-slate-500">/</span>
+            <span className="text-amber-300 flex items-center gap-1">
+              <span>{impersonating.logo}</span>
+              <span>{impersonating.name}</span>
+            </span>
+          </>
+        )}
       </div>
 
       <div className="flex-1" />
