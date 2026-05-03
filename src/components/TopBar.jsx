@@ -1,4 +1,4 @@
-import { Bell, Wrench, Users, LogOut, Car, Settings } from 'lucide-react'
+import { Bell, Wrench, Users, LogOut, Car, Settings, History } from 'lucide-react'
 import { unreadAlertsCount, criticalAlertsCount } from '../data/alerts'
 import { vehicles, maintenanceStatus } from '../data/vehicles'
 
@@ -52,6 +52,14 @@ export default function TopBar({ user, onOpen, onLogout }) {
       >
         <Users size={16} />
         Customers
+      </button>
+
+      <button
+        onClick={() => onOpen('playback')}
+        className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-slate-800 text-sm"
+      >
+        <History size={16} />
+        Playback
       </button>
 
       <button

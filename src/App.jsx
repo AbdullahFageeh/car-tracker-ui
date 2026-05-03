@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { MapContainer, TileLayer, Marker, Popup, Circle, useMap } from 'react-leaflet'
+import { useState, useEffect } from 'react'
+import { MapContainer, TileLayer, Marker, Popup, Circle, Polyline, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import { vehicles as initialVehicles } from './data/vehicles'
 import { zones } from './data/zones'
@@ -9,6 +9,7 @@ import TopBar from './components/TopBar'
 import AlertsPanel from './components/AlertsPanel'
 import MaintenancePanel from './components/MaintenancePanel'
 import CustomersPage from './components/CustomersPage'
+import PlaybackPanel from './components/PlaybackPanel'
 import AccountSettings from './components/AccountSettings'
 import Login from './components/Login'
 import { useLiveMovement } from './hooks/useLiveMovement'
@@ -53,6 +54,31 @@ function App() {
   const [tab, setTab] = useState('vehicles')
   const [overlay, setOverlay] = useState(null) // 'alerts' | 'maintenance' | 'customers' | 'account' | null
   const [vehicleOverrides, setVehicleOverrides] = useState({})
+  const [route, setRoute] = useState(null) // { vehicleId, date, points, stats, vehicle }
+  const [playbackIndex, setPlaybackIndex] = useState(0)
+  const [isPlaying, setIsPlaying] = useState(false)
+  const [playSpeed, setPlaySpeed] = useState(1) // 1x, 2x, 5x
+
+  // Animate playback marker
+  useEffect(() => {
+    if (!isPlaying || !route) return
+    const interval = setInterval(() => {
+      setPlaybackIndex((i) => {
+        if (i >= route.points.length - 1) {
+          setIsPlaying(false)
+          return i
+        }
+        return i + 1
+      })
+    }, 200 / playSpeed)
+    return () => clearInterval(interval)
+  }, [isPlaying, route, playSpeed])
+
+  // Reset playback when route changes
+  useEffect(() => {
+    setPlaybackIndex(0)
+    setIsPlaying(false)
+  }, [route?.vehicleId, route?.date])
 
   // Live moving vehicles (only when logged in)
   const liveVehicles = useLiveMovement(initialVehicles, 1500)
@@ -123,6 +149,57 @@ function App() {
             />
 
             <FlyToVehicle vehicle={selected} />
+
+            {/* Playback route */}
+            {route && route.points.length > 0 && (
+              <>
+                <Polyline
+                  positions={route.points.map((p) => [p.lat, p.lng])}
+                  pathOptions={{ color: '#2563eb', weight: 4, opacity: 0.8 }}
+                />
+                {/* Start marker */}
+                <Circle
+                  center={[route.points[0].lat, route.points[0].lng]}
+                  radius={40}
+                  pathOptions={{ color: '#16a34a', fillColor: '#16a34a', fillOpacity: 0.8 }}
+                />
+                {/* End marker */}
+                <Circle
+                  center={[
+                    route.points[route.points.length - 1].lat,
+                    route.points[route.points.length - 1].lng,
+                  ]}
+                  radius={40}
+                  pathOptions={{ color: '#dc2626', fillColor: '#dc2626', fillOpacity: 0.8 }}
+                />
+                {/* Playback marker (moving car) */}
+                {route.points[playbackIndex] && (
+                  <Marker
+                    position={[
+                      route.points[playbackIndex].lat,
+                      route.points[playbackIndex].lng,
+                    ]}
+                    icon={carIcon(true, route.vehicle?.icon || '🚗')}
+                  >
+                    <Popup>
+                      <div style={{ fontSize: '13px' }}>
+                        <div style={{ fontWeight: 'bold' }}>
+                          {route.vehicle?.name}
+                        </div>
+                        <div>⚡ Speed: {route.points[playbackIndex].speed} km/h</div>
+                        <div>
+                          🕒{' '}
+                          {new Date(route.points[playbackIndex].time).toLocaleTimeString(
+                            [],
+                            { hour: '2-digit', minute: '2-digit' }
+                          )}
+                        </div>
+                      </div>
+                    </Popup>
+                  </Marker>
+                )}
+              </>
+            )}
 
             {/* Zones */}
             {zones.map((zone) => (
@@ -206,6 +283,24 @@ function App() {
       )}
       {overlay === 'customers' && (
         <CustomersPage onClose={() => setOverlay(null)} />
+      )}
+      {overlay === 'playback' && (
+        <PlaybackPanel
+          onClose={() => setOverlay(null)}
+          onLoadRoute={(r) => setRoute(r)}
+          route={route}
+          onClearRoute={() => {
+            setRoute(null)
+            setIsPlaying(false)
+            setPlaybackIndex(0)
+          }}
+          playbackIndex={playbackIndex}
+          isPlaying={isPlaying}
+          onTogglePlay={() => setIsPlaying((p) => !p)}
+          onSeek={(i) => setPlaybackIndex(i)}
+          playSpeed={playSpeed}
+          onChangeSpeed={setPlaySpeed}
+        />
       )}
       {overlay === 'account' && (
         <AccountSettings
