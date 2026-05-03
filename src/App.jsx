@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
-import { MapContainer, TileLayer, Marker, Popup, Circle, Polyline, useMap } from 'react-leaflet'
+import { MapContainer, TileLayer, Marker, Popup, Circle, Polyline, Polygon, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import { vehicles as initialVehicles } from './data/vehicles'
 import { zones } from './data/zones'
+import { saudiBorder } from './data/saudiBorder'
 import Sidebar from './components/Sidebar'
 import VehicleDetail from './components/VehicleDetail'
 import TopBar from './components/TopBar'
@@ -14,6 +15,7 @@ import MasterDashboard from './components/MasterDashboard'
 import AccountSettings from './components/AccountSettings'
 import Login from './components/Login'
 import { useLiveMovement } from './hooks/useLiveMovement'
+import { useZoneViolations } from './hooks/useZoneViolations'
 
 // Custom car marker — green if engine ON, gray if OFF
 function carIcon(engineOn, emoji = '🚗') {
@@ -55,6 +57,7 @@ function App() {
   const [tab, setTab] = useState('vehicles')
   const [overlay, setOverlay] = useState(null) // 'alerts' | 'maintenance' | 'customers' | 'account' | null
   const [vehicleOverrides, setVehicleOverrides] = useState({})
+  const [zoneToast, setZoneToast] = useState(null)
   const [route, setRoute] = useState(null) // { vehicleId, date, points, stats, vehicle }
   const [playbackIndex, setPlaybackIndex] = useState(0)
   const [isPlaying, setIsPlaying] = useState(false)
@@ -83,6 +86,12 @@ function App() {
 
   // Live moving vehicles (only when logged in)
   const liveVehicles = useLiveMovement(initialVehicles, 1500)
+
+  // Watch for zone-violation alerts (live)
+  useZoneViolations(liveVehicles, zones, saudiBorder, (alert) => {
+    setZoneToast(alert)
+    setTimeout(() => setZoneToast(null), 5000)
+  })
 
   // Apply user edits on top of live data
   const vehicles = liveVehicles.map((v) =>
@@ -184,6 +193,18 @@ function App() {
             />
 
             <FlyToVehicle vehicle={selected} />
+
+            {/* Saudi country border (visual outline for country-wide vehicles) */}
+            <Polygon
+              positions={saudiBorder}
+              pathOptions={{
+                color: '#16a34a',
+                fillColor: '#16a34a',
+                fillOpacity: 0.04,
+                weight: 2,
+                dashArray: '8 6',
+              }}
+            />
 
             {/* Playback route */}
             {route && route.points.length > 0 && (
@@ -287,6 +308,12 @@ function App() {
                       </span>
                     </div>
                     <div>📊 Mileage: {vehicle.mileage.toLocaleString()} km</div>
+                    <div>
+                      {vehicle.zoneScope === 'country' ? '🇸🇦' : '🏙️'} Allowed area:{' '}
+                      <span style={{ fontWeight: 'bold' }}>
+                        {vehicle.zoneScope === 'country' ? 'Saudi Arabia' : 'City only'}
+                      </span>
+                    </div>
                   </div>
                 </Popup>
               </Marker>
@@ -302,6 +329,23 @@ function App() {
           />
         )}
       </div>
+
+      {/* Zone violation toast */}
+      {zoneToast && (
+        <div className="fixed bottom-6 right-6 z-[2000] bg-amber-500 text-white rounded-xl shadow-2xl px-4 py-3 max-w-sm flex items-start gap-3 animate-pulse">
+          <div className="text-2xl">🚨</div>
+          <div>
+            <div className="font-bold text-sm">{zoneToast.title}</div>
+            <div className="text-xs text-amber-50 mt-0.5">{zoneToast.message}</div>
+          </div>
+          <button
+            onClick={() => setZoneToast(null)}
+            className="text-amber-100 hover:text-white text-lg leading-none"
+          >
+            ×
+          </button>
+        </div>
+      )}
 
       {/* Overlays */}
       {overlay === 'alerts' && (

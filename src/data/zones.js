@@ -42,3 +42,28 @@ export function vehicleStatus(vehicle, zones) {
   const inside = zones.some((z) => isInsideZone(vehicle, z))
   return inside ? 'inside' : 'outside'
 }
+
+// Point-in-polygon (ray casting algorithm) — used to check if vehicle is inside Saudi border
+export function isInsidePolygon(lat, lng, polygon) {
+  let inside = false
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const [latI, lngI] = polygon[i]
+    const [latJ, lngJ] = polygon[j]
+    const intersect =
+      latI > lat !== latJ > lat &&
+      lng < ((lngJ - lngI) * (lat - latI)) / (latJ - latI) + lngI
+    if (intersect) inside = !inside
+  }
+  return inside
+}
+
+// Check if a vehicle is inside its allowed area
+// - city scope: must be inside one of the geofence zones
+// - country scope: must be inside the Saudi border
+export function isInsideAllowedArea(vehicle, zones, saudiBorder) {
+  if (vehicle.zoneScope === 'country') {
+    return isInsidePolygon(vehicle.lat, vehicle.lng, saudiBorder)
+  }
+  // city scope (default)
+  return zones.some((z) => isInsideZone(vehicle, z))
+}
