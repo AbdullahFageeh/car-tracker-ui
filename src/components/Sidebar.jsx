@@ -4,6 +4,7 @@ import { vehicleStatus } from '../data/zones'
 export default function Sidebar({
   vehicles,
   zones,
+  enabledFeatures,
   onSelect,
   selectedId,
   tab,
@@ -14,9 +15,11 @@ export default function Sidebar({
   onDeleteZone,
 }) {
   const onlineCount = vehicles.filter((v) => v.engineOn).length
-  const outsideCount = vehicles.filter(
-    (v) => vehicleStatus(v, zones) === 'outside'
-  ).length
+  const zonesEnabled = !enabledFeatures || enabledFeatures.includes('zones')
+  const outsideCount = zonesEnabled
+    ? vehicles.filter((v) => vehicleStatus(v, zones) === 'outside').length
+    : 0
+  const activeTab = zonesEnabled ? tab : 'vehicles'
 
   return (
     <div className="w-80 h-full bg-slate-900 text-white flex flex-col border-r border-slate-700">
@@ -36,27 +39,30 @@ export default function Sidebar({
       {/* Tab switcher */}
       <div className="flex border-b border-slate-700">
         <TabButton
-          active={tab === 'vehicles'}
+          active={activeTab === 'vehicles'}
           onClick={() => onTabChange('vehicles')}
           icon={<Car size={14} />}
           label="Vehicles"
           count={vehicles.length}
         />
-        <TabButton
-          active={tab === 'zones'}
-          onClick={() => onTabChange('zones')}
-          icon={<Shield size={14} />}
-          label="Zones"
-          count={zones.length}
-        />
+        {zonesEnabled && (
+          <TabButton
+            active={activeTab === 'zones'}
+            onClick={() => onTabChange('zones')}
+            icon={<Shield size={14} />}
+            label="Zones"
+            count={zones.length}
+          />
+        )}
       </div>
 
       {/* Tab content */}
       <div className="flex-1 overflow-y-auto">
-        {tab === 'vehicles' ? (
+        {activeTab === 'vehicles' ? (
           <VehicleList
             vehicles={vehicles}
             zones={zones}
+            showZoneStatus={zonesEnabled}
             onSelect={onSelect}
             selectedId={selectedId}
           />
@@ -91,13 +97,13 @@ function TabButton({ active, onClick, icon, label, count }) {
   )
 }
 
-function VehicleList({ vehicles, zones, onSelect, selectedId }) {
+function VehicleList({ vehicles, zones, showZoneStatus, onSelect, selectedId }) {
   return (
     <>
       {vehicles.map((v) => {
         const isSelected = v.id === selectedId
-        const status = vehicleStatus(v, zones)
-        const outside = status === 'outside'
+        const status = showZoneStatus ? vehicleStatus(v, zones) : 'inside'
+        const outside = showZoneStatus && status === 'outside'
         return (
           <div
             key={v.id}

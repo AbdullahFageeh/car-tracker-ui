@@ -1,11 +1,18 @@
 import { Bell, Wrench, Users, LogOut, Car, Settings, History } from 'lucide-react'
 import { unreadAlertsCount, criticalAlertsCount } from '../data/alerts'
 import { vehicles, maintenanceStatus } from '../data/vehicles'
-
-export default function TopBar({ user, onOpen, onLogout, impersonating }) {
+export default function TopBar({
+  user,
+  onOpen,
+  onLogout,
+  impersonating,
+  enabledFeatures,
+}) {
   const unread = unreadAlertsCount()
   const critical = criticalAlertsCount()
   const overdue = vehicles.filter((v) => maintenanceStatus(v).status === 'overdue').length
+  const hasFeature = (featureId) =>
+    !enabledFeatures || enabledFeatures.includes(featureId)
 
   return (
     <div className="h-14 bg-slate-900 border-b border-slate-800 flex items-center px-4 gap-4 text-white">
@@ -25,51 +32,59 @@ export default function TopBar({ user, onOpen, onLogout, impersonating }) {
 
       <div className="flex-1" />
 
-      <button
-        onClick={() => onOpen('alerts')}
-        className="relative flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-slate-800 text-sm"
-      >
-        <Bell size={16} />
-        Alerts
-        {unread > 0 && (
-          <span
-            className={`absolute -top-1 -right-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
-              critical > 0 ? 'bg-red-500' : 'bg-amber-500'
-            }`}
-          >
-            {unread}
-          </span>
-        )}
-      </button>
+      {hasFeature('alerts') && (
+        <button
+          onClick={() => onOpen('alerts')}
+          className="relative flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-slate-800 text-sm"
+        >
+          <Bell size={16} />
+          Alerts
+          {unread > 0 && (
+            <span
+              className={`absolute -top-1 -right-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
+                critical > 0 ? 'bg-red-500' : 'bg-amber-500'
+              }`}
+            >
+              {unread}
+            </span>
+          )}
+        </button>
+      )}
 
-      <button
-        onClick={() => onOpen('maintenance')}
-        className="relative flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-slate-800 text-sm"
-      >
-        <Wrench size={16} />
-        Maintenance
-        {overdue > 0 && (
-          <span className="absolute -top-1 -right-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-red-500">
-            {overdue}
-          </span>
-        )}
-      </button>
+      {hasFeature('maintenance') && (
+        <button
+          onClick={() => onOpen('maintenance')}
+          className="relative flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-slate-800 text-sm"
+        >
+          <Wrench size={16} />
+          Maintenance
+          {overdue > 0 && (
+            <span className="absolute -top-1 -right-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-red-500">
+              {overdue}
+            </span>
+          )}
+        </button>
+      )}
 
-      <button
-        onClick={() => onOpen('customers')}
-        className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-slate-800 text-sm"
-      >
-        <Users size={16} />
-        Customers
-      </button>
+      {hasFeature('customers') && (
+        <button
+          onClick={() => onOpen('customers')}
+          className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-slate-800 text-sm"
+        >
+          <Users size={16} />
+          Customers
+        </button>
+      )}
 
-      <button
-        onClick={() => onOpen('playback')}
-        className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-slate-800 text-sm"
-      >
-        <History size={16} />
-        Playback
-      </button>
+      {hasFeature('playback') && (
+        <button
+          onClick={() => onOpen('playback')}
+          className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-slate-800 text-sm"
+        >
+          <History size={16} />
+          Playback
+        </button>
+      )}
 
       <button
         onClick={() => onOpen('account')}

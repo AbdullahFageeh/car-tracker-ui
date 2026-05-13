@@ -12,25 +12,36 @@ import {
   LogOut,
   Users,
 } from 'lucide-react'
-import { companies, getPlatformStats } from '../data/companies'
+import AddCompanyModal from './AddCompanyModal'
+import {
+  getDevicePackageById,
+  getPlatformStats,
+  getTemplateById,
+} from '../data/companies'
 
-export default function MasterDashboard({ user, onOpenCompany, onLogout }) {
+export default function MasterDashboard({
+  user,
+  companies,
+  onCreateCompany,
+  onOpenCompany,
+  onLogout,
+}) {
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
-  const stats = getPlatformStats()
+  const [showAddCompany, setShowAddCompany] = useState(false)
+  const stats = getPlatformStats(companies)
 
-  const filtered = companies.filter((c) => {
+  const filtered = companies.filter((company) => {
     const matchesSearch =
-      c.name.toLowerCase().includes(search.toLowerCase()) ||
-      c.contact.toLowerCase().includes(search.toLowerCase()) ||
-      c.email.toLowerCase().includes(search.toLowerCase())
-    const matchesStatus = statusFilter === 'all' || c.status === statusFilter
+      company.name.toLowerCase().includes(search.toLowerCase()) ||
+      company.contact.toLowerCase().includes(search.toLowerCase()) ||
+      company.email.toLowerCase().includes(search.toLowerCase())
+    const matchesStatus = statusFilter === 'all' || company.status === statusFilter
     return matchesSearch && matchesStatus
   })
 
   return (
     <div className="h-screen w-screen flex flex-col bg-slate-50">
-      {/* Top bar */}
       <div className="h-14 bg-slate-900 border-b border-slate-800 flex items-center px-4 gap-4 text-white">
         <div className="flex items-center gap-2 font-bold">
           <Shield size={20} className="text-amber-400" />
@@ -39,7 +50,7 @@ export default function MasterDashboard({ user, onOpenCompany, onLogout }) {
         <div className="flex-1" />
         <div className="flex items-center gap-2 text-sm">
           <div className="w-8 h-8 rounded-full bg-amber-500 flex items-center justify-center text-xs font-bold">
-            {user.name?.split(' ').map((n) => n[0]).join('').slice(0, 2) || 'M'}
+            {user.name?.split(' ').map((name) => name[0]).join('').slice(0, 2) || 'M'}
           </div>
           <div className="text-sm">
             <div className="font-medium">{user.name}</div>
@@ -55,24 +66,24 @@ export default function MasterDashboard({ user, onOpenCompany, onLogout }) {
         </button>
       </div>
 
-      {/* Body */}
       <div className="flex-1 overflow-y-auto p-6">
         <div className="max-w-7xl mx-auto">
-          {/* Page header */}
           <div className="flex items-center justify-between mb-6">
             <div>
               <h1 className="text-2xl font-bold text-slate-900">Platform Overview</h1>
               <p className="text-sm text-slate-500">
-                Manage all companies using your tracking platform
+                Manage all companies, assign templates, and control feature access
               </p>
             </div>
-            <button className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-medium px-4 py-2.5 rounded-xl">
+            <button
+              onClick={() => setShowAddCompany(true)}
+              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-medium px-4 py-2.5 rounded-xl"
+            >
               <Plus size={16} />
               Add Company
             </button>
           </div>
 
-          {/* Stats */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
             <StatCard
               icon={<Building2 size={20} />}
@@ -90,9 +101,9 @@ export default function MasterDashboard({ user, onOpenCompany, onLogout }) {
             />
             <StatCard
               icon={<DollarSign size={20} />}
-              label="Monthly Revenue"
-              value={`${stats.mrr.toLocaleString()} SAR`}
-              sub="recurring (MRR)"
+              label="Annual Subscription"
+              value={`${stats.annualSubscriptionRevenue.toLocaleString()} SAR`}
+              sub="active yearly packages"
               color="amber"
             />
             <StatCard
@@ -104,7 +115,6 @@ export default function MasterDashboard({ user, onOpenCompany, onLogout }) {
             />
           </div>
 
-          {/* Companies table */}
           <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
             <div className="p-4 border-b border-slate-200 flex items-center gap-3">
               <div className="relative flex-1 max-w-md">
@@ -115,23 +125,23 @@ export default function MasterDashboard({ user, onOpenCompany, onLogout }) {
                 <input
                   type="text"
                   value={search}
-                  onChange={(e) => setSearch(e.target.value)}
+                  onChange={(event) => setSearch(event.target.value)}
                   placeholder="Search companies..."
                   className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
               </div>
               <div className="flex gap-1 bg-slate-100 p-1 rounded-lg">
-                {['all', 'active', 'trial', 'suspended'].map((s) => (
+                {['all', 'active', 'trial', 'suspended'].map((status) => (
                   <button
-                    key={s}
-                    onClick={() => setStatusFilter(s)}
+                    key={status}
+                    onClick={() => setStatusFilter(status)}
                     className={`px-3 py-1.5 rounded-md text-xs font-medium capitalize transition-colors ${
-                      statusFilter === s
+                      statusFilter === status
                         ? 'bg-white text-slate-900 shadow-sm'
                         : 'text-slate-600 hover:text-slate-900'
                     }`}
                   >
-                    {s}
+                    {status}
                   </button>
                 ))}
               </div>
@@ -142,7 +152,7 @@ export default function MasterDashboard({ user, onOpenCompany, onLogout }) {
                 <tr>
                   <th className="text-left px-4 py-3 font-semibold">Company</th>
                   <th className="text-left px-4 py-3 font-semibold">Contact</th>
-                  <th className="text-left px-4 py-3 font-semibold">Plan</th>
+                  <th className="text-left px-4 py-3 font-semibold">Billing</th>
                   <th className="text-left px-4 py-3 font-semibold">Vehicles</th>
                   <th className="text-left px-4 py-3 font-semibold">Status</th>
                   <th className="text-left px-4 py-3 font-semibold">Last active</th>
@@ -150,53 +160,69 @@ export default function MasterDashboard({ user, onOpenCompany, onLogout }) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {filtered.map((c) => (
-                  <tr key={c.id} className="hover:bg-slate-50">
+                {filtered.map((company) => (
+                  <tr key={company.id} className="hover:bg-slate-50 align-top">
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3">
                         <div className="w-9 h-9 rounded-xl bg-slate-100 flex items-center justify-center text-lg">
-                          {c.logo}
+                          {company.logo}
                         </div>
                         <div>
-                          <div className="font-semibold text-slate-900">{c.name}</div>
-                          <div className="text-xs text-slate-500">{c.city}</div>
+                          <div className="font-semibold text-slate-900">{company.name}</div>
+                          <div className="flex items-center gap-2 mt-1 flex-wrap">
+                            <span className="text-xs text-slate-500">{company.city}</span>
+                            <span className="w-1 h-1 rounded-full bg-slate-300" />
+                            <BusinessTemplateBadge templateId={company.templateId} />
+                            <span className="text-xs text-slate-500">
+                              {company.enabledFeatures?.length || 0} features
+                            </span>
+                          </div>
                         </div>
                       </div>
                     </td>
                     <td className="px-4 py-3">
-                      <div className="text-slate-700">{c.contact}</div>
-                      <div className="text-xs text-slate-500">{c.email}</div>
+                      <div className="text-slate-700">{company.contact}</div>
+                      <div className="text-xs text-slate-500">{company.email}</div>
                     </td>
                     <td className="px-4 py-3">
-                      <PlanBadge plan={c.plan} />
+                      <div className="flex items-center gap-2 flex-wrap mb-1.5">
+                        <PlanBadge plan={company.plan} />
+                        <DevicePackageBadge packageId={company.devicePackageId} />
+                      </div>
+                      <div className="text-xs text-slate-500">
+                        {company.vehicleCount} devices
+                      </div>
+                      <div className="text-xs text-slate-500 mt-1">
+                        Hardware: {company.hardwareTotal.toLocaleString()} SAR
+                      </div>
                       <div className="text-xs text-slate-500 mt-0.5">
-                        {c.monthlyFee} SAR/mo
+                        Annual: {company.annualSubscriptionTotal.toLocaleString()} SAR
                       </div>
                     </td>
                     <td className="px-4 py-3">
                       <div className="text-slate-900 font-medium">
-                        {c.vehicleCount}{' '}
-                        <span className="text-slate-400">/ {c.vehicleLimit}</span>
+                        {company.vehicleCount}{' '}
+                        <span className="text-slate-400">/ {company.vehicleLimit}</span>
                       </div>
                       <div className="w-20 h-1.5 bg-slate-100 rounded-full mt-1 overflow-hidden">
                         <div
                           className="h-full bg-blue-500"
                           style={{
-                            width: `${(c.vehicleCount / c.vehicleLimit) * 100}%`,
+                            width: `${(company.vehicleCount / company.vehicleLimit) * 100}%`,
                           }}
                         />
                       </div>
                     </td>
                     <td className="px-4 py-3">
-                      <StatusBadge status={c.status} />
+                      <StatusBadge status={company.status} />
                     </td>
                     <td className="px-4 py-3 text-slate-600">
-                      {formatLastActive(c.lastActiveAt)}
+                      {formatLastActive(company.lastActiveAt)}
                     </td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex items-center justify-end gap-1">
                         <button
-                          onClick={() => onOpenCompany(c)}
+                          onClick={() => onOpenCompany(company)}
                           className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg"
                         >
                           <Eye size={13} />
@@ -223,7 +249,39 @@ export default function MasterDashboard({ user, onOpenCompany, onLogout }) {
           </div>
         </div>
       </div>
+
+      {showAddCompany && (
+        <AddCompanyModal
+          onClose={() => setShowAddCompany(false)}
+          onCreateCompany={(company) => {
+            onCreateCompany(company)
+            setShowAddCompany(false)
+          }}
+        />
+      )}
     </div>
+  )
+}
+
+function DevicePackageBadge({ packageId }) {
+  const devicePackage = getDevicePackageById(packageId)
+
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700">
+      <span>{devicePackage.icon}</span>
+      <span>{devicePackage.name}</span>
+    </span>
+  )
+}
+
+function BusinessTemplateBadge({ templateId }) {
+  const template = getTemplateById(templateId)
+
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">
+      <span>{template.icon}</span>
+      <span>{template.name}</span>
+    </span>
   )
 }
 

@@ -7,7 +7,6 @@ import {
   MapPin,
   Activity,
   AlertTriangle,
-  History,
   Phone,
   Calendar,
   DollarSign,

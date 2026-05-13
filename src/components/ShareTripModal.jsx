@@ -13,7 +13,7 @@ export default function ShareTripModal({ vehicle, onClose }) {
   const [generated, setGenerated] = useState(false)
   const [copied, setCopied] = useState(false)
 
-  const token = useMemo(() => makeToken(), [vehicle.id])
+  const token = useMemo(() => makeToken(), [])
   const url = `https://track.example.com/share/${token}`
 
   const handleGenerate = () => setGenerated(true)

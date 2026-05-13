@@ -17,6 +17,13 @@ import AccountSettings from './components/AccountSettings'
 import Login from './components/Login'
 import { useLiveMovement } from './hooks/useLiveMovement'
 import { useZoneViolations } from './hooks/useZoneViolations'
+import {
+  allFeatureIds,
+  calculateDeviceBilling,
+  getPlanMeta,
+  getTemplateById,
+  initialCompanies,
+} from './data/companies'
 
 // Custom car marker — green if engine ON, gray if OFF
 function carIcon(engineOn, emoji = '🚗') {
@@ -54,6 +61,7 @@ function FlyToVehicle({ vehicle }) {
 
 function App() {
   const [user, setUser] = useState(null)
+  const [companies, setCompanies] = useState(initialCompanies)
   const [selected, setSelected] = useState(null)
   const [tab, setTab] = useState('vehicles')
   const [overlay, setOverlay] = useState(null) // 'alerts' | 'maintenance' | 'customers' | 'account' | null
@@ -67,6 +75,23 @@ function App() {
   const [playbackIndex, setPlaybackIndex] = useState(0)
   const [isPlaying, setIsPlaying] = useState(false)
   const [playSpeed, setPlaySpeed] = useState(1) // 1x, 2x, 5x
+  const impersonatedCompany =
+    user?.role === 'master' && user?.impersonatingCompanyId
+      ? companies.find((company) => company.id === user.impersonatingCompanyId) || null
+      : null
+  const signedInCompany =
+    user?.role === 'admin'
+      ? companies.find((company) => company.id === user.companyId) || companies[0] || null
+      : null
+  const activeCompany = impersonatedCompany || signedInCompany
+  const enabledFeatures =
+    activeCompany?.enabledFeatures?.length ? activeCompany.enabledFeatures : allFeatureIds
+  const zonesEnabled = enabledFeatures.includes('zones')
+  const alertsEnabled = enabledFeatures.includes('alerts')
+  const maintenanceEnabled = enabledFeatures.includes('maintenance')
+  const customersEnabled = enabledFeatures.includes('customers')
+  const playbackEnabled = enabledFeatures.includes('playback')
+  const visibleZones = zonesEnabled ? zones : []
 
   // Animate playback marker
   useEffect(() => {
@@ -83,17 +108,13 @@ function App() {
     return () => clearInterval(interval)
   }, [isPlaying, route, playSpeed])
 
-  // Reset playback when route changes
-  useEffect(() => {
-    setPlaybackIndex(0)
-    setIsPlaying(false)
-  }, [route?.vehicleId, route?.date])
 
   // Live moving vehicles (only when logged in)
   const liveVehicles = useLiveMovement(initialVehicles, 1500)
 
   // Watch for zone-violation alerts (live)
-  useZoneViolations(liveVehicles, zones, saudiBorder, (alert) => {
+  useZoneViolations(liveVehicles, visibleZones, zonesEnabled ? saudiBorder : [], (alert) => {
+    if (!alertsEnabled) return
     setZoneToast(alert)
     setTimeout(() => setZoneToast(null), 5000)
   })
@@ -124,22 +145,81 @@ function App() {
     }))
   }
 
+  const handleCreateCompany = (draftCompany) => {
+    const template = getTemplateById(draftCompany.templateId)
+    const planMeta = getPlanMeta(draftCompany.plan)
+    const createdAt = new Date().toISOString()
+    const billing = calculateDeviceBilling({
+      devicePackageId: draftCompany.devicePackageId,
+      vehicleCount: draftCompany.vehicleCount,
+      trackingDeviceUnitPrice: draftCompany.trackingDeviceUnitPrice,
+      dashcamUnitPrice: draftCompany.dashcamUnitPrice,
+      yearlySubscriptionUnitPrice: draftCompany.yearlySubscriptionUnitPrice,
+    })
+
+    setCompanies((current) => [
+      {
+        id: `co_${Date.now()}`,
+        name: draftCompany.name,
+        logo: template.icon,
+        contact: draftCompany.contact,
+        email: draftCompany.email,
+        phone: draftCompany.phone,
+        city: draftCompany.city,
+        plan: draftCompany.plan,
+        monthlyFee: planMeta.monthlyFee,
+        vehicleCount: draftCompany.vehicleCount,
+        vehicleLimit: Math.max(planMeta.vehicleLimit, draftCompany.vehicleCount),
+        status: 'trial',
+        createdAt: createdAt.slice(0, 10),
+        lastActiveAt: createdAt,
+        templateId: draftCompany.templateId,
+        devicePackageId: draftCompany.devicePackageId,
+        trackingDeviceUnitPrice: draftCompany.trackingDeviceUnitPrice,
+        dashcamUnitPrice:
+          draftCompany.devicePackageId === 'tracking_dashcam'
+            ? draftCompany.dashcamUnitPrice
+            : 0,
+        yearlySubscriptionUnitPrice: draftCompany.yearlySubscriptionUnitPrice,
+        enabledFeatures: draftCompany.enabledFeatures,
+        ...billing,
+      },
+      ...current,
+    ])
+  }
+
+  const resetWorkspaceView = () => {
+    setSelected(null)
+    setTab('vehicles')
+    setOverlay(null)
+    setZoneToast(null)
+    setDrawMode(null)
+    setDraftZone(null)
+    setShowZoneDialog(false)
+    setRoute(null)
+    setPlaybackIndex(0)
+    setIsPlaying(false)
+  }
+
+
   if (!user) {
     return <Login onLogin={setUser} />
   }
 
   // Master mode: show platform dashboard instead of company app
-  if (user.role === 'master' && !user.impersonating) {
+  if (user.role === 'master' && !user.impersonatingCompanyId) {
     return (
       <MasterDashboard
         user={user}
-        onOpenCompany={(company) =>
-          setUser({ ...user, impersonating: company })
-        }
+        companies={companies}
+        onCreateCompany={handleCreateCompany}
+        onOpenCompany={(company) => {
+          resetWorkspaceView()
+          setUser({ ...user, impersonatingCompanyId: company.id })
+        }}
         onLogout={() => {
+          resetWorkspaceView()
           setUser(null)
-          setSelected(null)
-          setOverlay(null)
         }}
       />
     )
@@ -150,14 +230,17 @@ function App() {
   return (
     <div className="h-screen w-screen flex flex-col">
       {/* Impersonation banner (only when master is viewing as a company) */}
-      {user.role === 'master' && user.impersonating && (
+      {user.role === 'master' && impersonatedCompany && (
         <div className="bg-amber-500 text-amber-950 px-4 py-2 flex items-center justify-between text-sm font-medium">
           <div className="flex items-center gap-2">
-            👁️ Viewing as <span className="font-bold">{user.impersonating.name}</span>
+            👁️ Viewing as <span className="font-bold">{impersonatedCompany.name}</span>
             <span className="text-amber-800">· Master mode</span>
           </div>
           <button
-            onClick={() => setUser({ ...user, impersonating: null })}
+            onClick={() => {
+              resetWorkspaceView()
+              setUser({ ...user, impersonatingCompanyId: null })
+            }}
             className="px-3 py-1 bg-amber-950 text-amber-50 rounded-lg text-xs font-semibold hover:bg-amber-900"
           >
             ← Back to Master
@@ -166,10 +249,12 @@ function App() {
       )}
 
       <TopBar
-        user={user.impersonating ? { ...user, name: user.impersonating.contact, role: 'admin' } : user}
-        impersonating={user.impersonating}
+        user={impersonatedCompany ? { ...user, name: impersonatedCompany.contact, role: 'admin' } : user}
+        impersonating={impersonatedCompany}
+        enabledFeatures={enabledFeatures}
         onOpen={setOverlay}
         onLogout={() => {
+          resetWorkspaceView()
           setUser(null)
           setSelected(null)
           setOverlay(null)
@@ -179,7 +264,8 @@ function App() {
       <div className="flex-1 flex min-h-0">
         <Sidebar
           vehicles={vehicles}
-          zones={zones}
+          zones={visibleZones}
+          enabledFeatures={enabledFeatures}
           onSelect={setSelected}
           selectedId={selected?.id}
           tab={tab}
@@ -210,7 +296,7 @@ function App() {
             <FlyToVehicle vehicle={selected} />
 
             {/* Zone drawing handler (only listens during draw mode) */}
-            {drawMode && (
+            {drawMode && zonesEnabled && (
               <ZoneDrawHandler
                 drawMode={drawMode}
                 draftZone={draftZone}
@@ -221,7 +307,7 @@ function App() {
             )}
 
             {/* Draft zone preview while drawing */}
-            {draftZone && (
+            {draftZone && zonesEnabled && (
               <Circle
                 center={[draftZone.lat, draftZone.lng]}
                 radius={draftZone.radius}
@@ -236,16 +322,18 @@ function App() {
             )}
 
             {/* Saudi country border (visual outline for country-wide vehicles) */}
-            <Polygon
-              positions={saudiBorder}
-              pathOptions={{
-                color: '#16a34a',
-                fillColor: '#16a34a',
-                fillOpacity: 0.04,
-                weight: 2,
-                dashArray: '8 6',
-              }}
-            />
+            {zonesEnabled && (
+              <Polygon
+                positions={saudiBorder}
+                pathOptions={{
+                  color: '#16a34a',
+                  fillColor: '#16a34a',
+                  fillOpacity: 0.04,
+                  weight: 2,
+                  dashArray: '8 6',
+                }}
+              />
+            )}
 
             {/* Playback route */}
             {route && route.points.length > 0 && (
@@ -299,7 +387,7 @@ function App() {
             )}
 
             {/* Zones */}
-            {zones.map((zone) => (
+            {visibleZones.map((zone) => (
               <Circle
                 key={zone.id}
                 center={[zone.lat, zone.lng]}
@@ -372,7 +460,7 @@ function App() {
       </div>
 
       {/* Drawing mode banner */}
-      {drawMode && (
+      {drawMode && zonesEnabled && (
         <div className="fixed top-16 left-1/2 -translate-x-1/2 z-[1500] bg-blue-600 text-white px-4 py-2 rounded-full shadow-lg text-sm font-medium flex items-center gap-3">
           {drawMode === 'pickCenter' ? (
             <>
@@ -396,7 +484,7 @@ function App() {
       )}
 
       {/* Save zone dialog */}
-      {showZoneDialog && (
+      {showZoneDialog && zonesEnabled && (
         <ZoneSaveDialog
           draftZone={draftZone}
           onSave={(newZone) => {
@@ -431,25 +519,29 @@ function App() {
       )}
 
       {/* Overlays */}
-      {overlay === 'alerts' && (
+      {overlay === 'alerts' && alertsEnabled && (
         <AlertsPanel
           onClose={() => setOverlay(null)}
           onSelectVehicle={(v) => setSelected(v)}
         />
       )}
-      {overlay === 'maintenance' && (
+      {overlay === 'maintenance' && maintenanceEnabled && (
         <MaintenancePanel
           onClose={() => setOverlay(null)}
           onSelectVehicle={(v) => setSelected(v)}
         />
       )}
-      {overlay === 'customers' && (
+      {overlay === 'customers' && customersEnabled && (
         <CustomersPage onClose={() => setOverlay(null)} />
       )}
-      {overlay === 'playback' && (
+      {overlay === 'playback' && playbackEnabled && (
         <PlaybackPanel
           onClose={() => setOverlay(null)}
-          onLoadRoute={(r) => setRoute(r)}
+          onLoadRoute={(r) => {
+            setRoute(r)
+            setIsPlaying(false)
+            setPlaybackIndex(0)
+          }}
           route={route}
           onClearRoute={() => {
             setRoute(null)

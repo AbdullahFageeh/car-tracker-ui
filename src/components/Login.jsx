@@ -50,12 +50,12 @@ export default function Login({ onLogin }) {
             Track every car. Every customer. Every kilometer.
           </h1>
           <p className="text-blue-100 text-lg">
-            The only fleet platform built specifically for car rental businesses.
+            One fleet platform for rental, transport, logistics, and delivery businesses.
           </p>
 
           <div className="mt-12 grid grid-cols-2 gap-4 text-sm">
             <Feature title="Live tracking" desc="Real-time GPS for every vehicle" />
-            <Feature title="Rentals" desc="Customer & contract management" />
+            <Feature title="Templates" desc="Pre-made setups for each business type" />
             <Feature title="Geofences" desc="Zone restrictions & alerts" />
             <Feature title="Maintenance" desc="Service & oil change reminders" />
           </div>
