@@ -22,6 +22,7 @@ import {
   SESSION_DURATION_MS,
   verifyPassword,
 } from './auth.js'
+import { companyDataRouter } from './companyDataRouter.js'
 import { prisma } from './db.js'
 import { serializeCompany, serializeUser } from './serializers.js'
 
@@ -519,6 +520,8 @@ app.post(
     response.status(201).json({ company: serializeCompany(company) })
   }
 )
+
+app.use('/api/companies/:companyId', requireAuth, companyDataRouter)
 
 if (existsSync(indexHtmlPath)) {
   app.use(express.static(distPath))
