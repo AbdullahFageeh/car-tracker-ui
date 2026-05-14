@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { X, User, Lock, Bell, Globe, Save, Check, Building2, Clock, Map, CreditCard } from 'lucide-react'
 
-export default function AccountSettings({ user, onClose, onSave }) {
+export default function AccountSettings({ user, onClose, onSave, onChangePassword }) {
   const [section, setSection] = useState('profile')
   const [savedFlash, setSavedFlash] = useState(false)
 
@@ -63,15 +63,26 @@ export default function AccountSettings({ user, onClose, onSave }) {
     setTimeout(() => setSavedFlash(false), 1800)
   }
 
-  const handleSaveProfile = () => {
-    onSave && onSave({ ...user, ...profile })
+  const handleSaveProfile = async () => {
+    const result = onSave ? await onSave({ ...user, ...profile }) : { ok: true }
+    if (result?.ok === false) return alert(result.error)
     flashSaved()
   }
 
-  const handleChangePwd = () => {
-    if (!pwd.current || !pwd.next) return alert('Please fill all password fields')
+  const handleChangePwd = async () => {
+    if (!pwd.current || !pwd.next || !pwd.confirm) return alert('Please fill all password fields')
     if (pwd.next !== pwd.confirm) return alert('New passwords do not match')
     if (pwd.next.length < 6) return alert('Password must be at least 6 characters')
+
+    const result = onChangePassword
+      ? onChangePassword({
+          currentPassword: pwd.current,
+          newPassword: pwd.next,
+        })
+      : { ok: true }
+
+    const resolvedResult = await result
+    if (resolvedResult?.ok === false) return alert(resolvedResult.error)
     setPwd({ current: '', next: '', confirm: '' })
     flashSaved()
   }
@@ -178,7 +189,12 @@ export default function AccountSettings({ user, onClose, onSave }) {
                 <Field label="Full name" value={profile.name} onChange={(v) => setProfile({ ...profile, name: v })} />
                 <Field label="Email" type="email" value={profile.email} onChange={(v) => setProfile({ ...profile, email: v })} />
                 <Field label="Phone" value={profile.phone} onChange={(v) => setProfile({ ...profile, phone: v })} />
-                <Field label="Company" value={profile.company} onChange={(v) => setProfile({ ...profile, company: v })} />
+                <Field
+                  label="Company"
+                  value={profile.company}
+                  onChange={(v) => setProfile({ ...profile, company: v })}
+                  disabled
+                />
 
                 <div className="pt-3">
                   <button
@@ -615,15 +631,16 @@ function Label({ children }) {
   return <div className="text-xs font-medium text-slate-700 uppercase tracking-wide">{children}</div>
 }
 
-function Field({ label, value, onChange, type = 'text' }) {
+function Field({ label, value, onChange, type = 'text', disabled = false }) {
   return (
     <div>
       <Label>{label}</Label>
       <input
         type={type}
         value={value}
+        disabled={disabled}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full mt-1.5 px-3 py-2 border border-slate-300 rounded-xl text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+        className="w-full mt-1.5 px-3 py-2 border border-slate-300 rounded-xl text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 disabled:bg-slate-50 disabled:text-slate-400"
       />
     </div>
   )

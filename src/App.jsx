@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { MapContainer, TileLayer, Marker, Popup, Circle, Polyline, Polygon, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import { vehicles as initialVehicles } from './data/vehicles'
@@ -12,20 +12,23 @@ import MaintenancePanel from './components/MaintenancePanel'
 import CustomersPage from './components/CustomersPage'
 import PlaybackPanel from './components/PlaybackPanel'
 import MasterDashboard from './components/MasterDashboard'
+import MarketingPage from './components/MarketingPage'
 import { ZoneDrawHandler, ZoneSaveDialog } from './components/ZoneDrawing'
 import AccountSettings from './components/AccountSettings'
 import Login from './components/Login'
+import {
+  changePassword as changePasswordRequest,
+  createCompany as createCompanyRequest,
+  getSession,
+  login as loginRequest,
+  logout as logoutRequest,
+  signupTrial,
+  updateProfile,
+} from './lib/api'
 import { useLiveMovement } from './hooks/useLiveMovement'
 import { useZoneViolations } from './hooks/useZoneViolations'
-import {
-  allFeatureIds,
-  calculateDeviceBilling,
-  getPlanMeta,
-  getTemplateById,
-  initialCompanies,
-} from './data/companies'
+import { allFeatureIds } from './data/companies'
 
-// Custom car marker — green if engine ON, gray if OFF
 function carIcon(engineOn, emoji = '🚗') {
   const color = engineOn ? '#22c55e' : '#94a3b8'
   const html = `
@@ -42,6 +45,7 @@ function carIcon(engineOn, emoji = '🚗') {
       font-size: 18px;
     ">${emoji}</div>
   `
+
   return L.divIcon({
     html,
     className: 'car-marker',
@@ -53,35 +57,94 @@ function carIcon(engineOn, emoji = '🚗') {
 
 function FlyToVehicle({ vehicle }) {
   const map = useMap()
+
   if (vehicle) {
     map.flyTo([vehicle.lat, vehicle.lng], 15, { duration: 1.2 })
   }
+
   return null
 }
 
 function App() {
+  const [authView, setAuthView] = useState('landing')
+  const [authReady, setAuthReady] = useState(false)
   const [user, setUser] = useState(null)
-  const [companies, setCompanies] = useState(initialCompanies)
+  const [companies, setCompanies] = useState([])
+  const [impersonatingCompanyId, setImpersonatingCompanyId] = useState(null)
   const [selected, setSelected] = useState(null)
   const [tab, setTab] = useState('vehicles')
-  const [overlay, setOverlay] = useState(null) // 'alerts' | 'maintenance' | 'customers' | 'account' | null
+  const [overlay, setOverlay] = useState(null)
   const [vehicleOverrides, setVehicleOverrides] = useState({})
   const [zoneToast, setZoneToast] = useState(null)
   const [zones, setZones] = useState(initialZones)
-  const [drawMode, setDrawMode] = useState(null) // null | 'pickCenter' | 'pickRadius'
-  const [draftZone, setDraftZone] = useState(null) // { lat, lng, radius }
+  const [drawMode, setDrawMode] = useState(null)
+  const [draftZone, setDraftZone] = useState(null)
   const [showZoneDialog, setShowZoneDialog] = useState(false)
-  const [route, setRoute] = useState(null) // { vehicleId, date, points, stats, vehicle }
+  const [route, setRoute] = useState(null)
   const [playbackIndex, setPlaybackIndex] = useState(0)
   const [isPlaying, setIsPlaying] = useState(false)
-  const [playSpeed, setPlaySpeed] = useState(1) // 1x, 2x, 5x
+  const [playSpeed, setPlaySpeed] = useState(1)
+
+  useEffect(() => {
+    let cancelled = false
+
+    getSession()
+      .then((payload) => {
+        if (cancelled) return
+        setUser(payload.user)
+        setCompanies(Array.isArray(payload.companies) ? payload.companies : [])
+      })
+      .catch(() => {
+        if (cancelled) return
+        setUser(null)
+        setCompanies([])
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setAuthReady(true)
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const sessionUser = (() => {
+    if (!user) return null
+
+    if (user.role === 'master') {
+      const safeImpersonatingCompanyId =
+        impersonatingCompanyId &&
+        companies.some((company) => company.id === impersonatingCompanyId)
+          ? impersonatingCompanyId
+          : null
+
+      return {
+        ...user,
+        impersonatingCompanyId: safeImpersonatingCompanyId,
+      }
+    }
+
+    const matchingCompany =
+      companies.find((company) => company.id === user.companyId) || null
+
+    if (!matchingCompany) return null
+
+    return {
+      ...user,
+      companyId: matchingCompany.id,
+      company: matchingCompany.name,
+    }
+  })()
+
   const impersonatedCompany =
-    user?.role === 'master' && user?.impersonatingCompanyId
-      ? companies.find((company) => company.id === user.impersonatingCompanyId) || null
+    sessionUser?.role === 'master' && sessionUser?.impersonatingCompanyId
+      ? companies.find((company) => company.id === sessionUser.impersonatingCompanyId) || null
       : null
   const signedInCompany =
-    user?.role === 'admin'
-      ? companies.find((company) => company.id === user.companyId) || companies[0] || null
+    sessionUser?.role === 'admin'
+      ? companies.find((company) => company.id === sessionUser.companyId) || null
       : null
   const activeCompany = impersonatedCompany || signedInCompany
   const enabledFeatures =
@@ -93,43 +156,46 @@ function App() {
   const playbackEnabled = enabledFeatures.includes('playback')
   const visibleZones = zonesEnabled ? zones : []
 
-  // Animate playback marker
   useEffect(() => {
     if (!isPlaying || !route) return
+
     const interval = setInterval(() => {
-      setPlaybackIndex((i) => {
-        if (i >= route.points.length - 1) {
+      setPlaybackIndex((index) => {
+        if (index >= route.points.length - 1) {
           setIsPlaying(false)
-          return i
+          return index
         }
-        return i + 1
+
+        return index + 1
       })
     }, 200 / playSpeed)
+
     return () => clearInterval(interval)
   }, [isPlaying, route, playSpeed])
 
-
-  // Live moving vehicles (only when logged in)
   const liveVehicles = useLiveMovement(initialVehicles, 1500)
 
-  // Watch for zone-violation alerts (live)
-  useZoneViolations(liveVehicles, visibleZones, zonesEnabled ? saudiBorder : [], (alert) => {
-    if (!alertsEnabled) return
-    setZoneToast(alert)
-    setTimeout(() => setZoneToast(null), 5000)
-  })
-
-  // Apply user edits on top of live data
-  const vehicles = liveVehicles.map((v) =>
-    vehicleOverrides[v.id] ? { ...v, ...vehicleOverrides[v.id] } : v
+  useZoneViolations(
+    liveVehicles,
+    visibleZones,
+    zonesEnabled ? saudiBorder : [],
+    (alert) => {
+      if (!alertsEnabled) return
+      setZoneToast(alert)
+      setTimeout(() => setZoneToast(null), 5000)
+    }
   )
 
-  // Keep selected in sync with the live moving copy
-  const selectedLive = selected ? vehicles.find((v) => v.id === selected.id) : null
+  const vehicles = liveVehicles.map((vehicle) =>
+    vehicleOverrides[vehicle.id]
+      ? { ...vehicle, ...vehicleOverrides[vehicle.id] }
+      : vehicle
+  )
+  const selectedLive = selected ? vehicles.find((vehicle) => vehicle.id === selected.id) : null
 
   const handleSaveVehicle = (updated) => {
-    setVehicleOverrides((prev) => ({
-      ...prev,
+    setVehicleOverrides((current) => ({
+      ...current,
       [updated.id]: {
         name: updated.name,
         plate: updated.plate,
@@ -145,49 +211,6 @@ function App() {
     }))
   }
 
-  const handleCreateCompany = (draftCompany) => {
-    const template = getTemplateById(draftCompany.templateId)
-    const planMeta = getPlanMeta(draftCompany.plan)
-    const createdAt = new Date().toISOString()
-    const billing = calculateDeviceBilling({
-      devicePackageId: draftCompany.devicePackageId,
-      vehicleCount: draftCompany.vehicleCount,
-      trackingDeviceUnitPrice: draftCompany.trackingDeviceUnitPrice,
-      dashcamUnitPrice: draftCompany.dashcamUnitPrice,
-      yearlySubscriptionUnitPrice: draftCompany.yearlySubscriptionUnitPrice,
-    })
-
-    setCompanies((current) => [
-      {
-        id: `co_${Date.now()}`,
-        name: draftCompany.name,
-        logo: template.icon,
-        contact: draftCompany.contact,
-        email: draftCompany.email,
-        phone: draftCompany.phone,
-        city: draftCompany.city,
-        plan: draftCompany.plan,
-        monthlyFee: planMeta.monthlyFee,
-        vehicleCount: draftCompany.vehicleCount,
-        vehicleLimit: Math.max(planMeta.vehicleLimit, draftCompany.vehicleCount),
-        status: 'trial',
-        createdAt: createdAt.slice(0, 10),
-        lastActiveAt: createdAt,
-        templateId: draftCompany.templateId,
-        devicePackageId: draftCompany.devicePackageId,
-        trackingDeviceUnitPrice: draftCompany.trackingDeviceUnitPrice,
-        dashcamUnitPrice:
-          draftCompany.devicePackageId === 'tracking_dashcam'
-            ? draftCompany.dashcamUnitPrice
-            : 0,
-        yearlySubscriptionUnitPrice: draftCompany.yearlySubscriptionUnitPrice,
-        enabledFeatures: draftCompany.enabledFeatures,
-        ...billing,
-      },
-      ...current,
-    ])
-  }
-
   const resetWorkspaceView = () => {
     setSelected(null)
     setTab('vehicles')
@@ -201,26 +224,115 @@ function App() {
     setIsPlaying(false)
   }
 
-
-  if (!user) {
-    return <Login onLogin={setUser} />
+  const applyAuthPayload = (payload) => {
+    setUser(payload.user)
+    setCompanies(Array.isArray(payload.companies) ? payload.companies : [])
+    setImpersonatingCompanyId(null)
   }
 
-  // Master mode: show platform dashboard instead of company app
-  if (user.role === 'master' && !user.impersonatingCompanyId) {
+  const handleCreateCompany = async (draftCompany) => {
+    const { company } = await createCompanyRequest(draftCompany)
+    setCompanies((currentCompanies) => [company, ...currentCompanies])
+  }
+
+  const handleCreateTrial = async (draftCompany) => {
+    const payload = await signupTrial(draftCompany)
+    resetWorkspaceView()
+    setAuthView('landing')
+    applyAuthPayload(payload)
+  }
+
+  const handleLogin = async (credentials) => {
+    const payload = await loginRequest(credentials)
+    resetWorkspaceView()
+    setAuthView('landing')
+    applyAuthPayload(payload)
+  }
+
+  const handleLogout = async () => {
+    try {
+      await logoutRequest()
+    } catch {
+      // Ignore logout cleanup failures and clear local auth state anyway.
+    }
+
+    resetWorkspaceView()
+    setAuthView('landing')
+    setImpersonatingCompanyId(null)
+    setUser(null)
+    setCompanies([])
+  }
+
+  const handleSaveUser = async (updatedUser) => {
+    try {
+      const payload = await updateProfile({
+        name: updatedUser.name,
+        email: updatedUser.email,
+        phone: updatedUser.phone,
+        language: updatedUser.language,
+        timezone: updatedUser.timezone,
+        units: updatedUser.units,
+      })
+
+      setUser(payload.user)
+      setCompanies(Array.isArray(payload.companies) ? payload.companies : companies)
+
+      return { ok: true }
+    } catch (error) {
+      return { ok: false, error: error.message }
+    }
+  }
+
+  const handleChangePassword = async ({ currentPassword, newPassword }) => {
+    try {
+      await changePasswordRequest({
+        currentPassword,
+        newPassword,
+      })
+
+      return { ok: true }
+    } catch (error) {
+      return { ok: false, error: error.message }
+    }
+  }
+
+  if (!authReady) {
+    return (
+      <div className="h-screen w-screen bg-slate-950 text-white flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-lg font-semibold">Loading workspace…</div>
+          <div className="text-sm text-slate-400 mt-2">
+            Checking your signed-in session.
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (!sessionUser) {
+    if (authView === 'login') {
+      return <Login onBack={() => setAuthView('landing')} onLogin={handleLogin} />
+    }
+
+    return (
+      <MarketingPage
+        onCreateTrial={handleCreateTrial}
+        onOpenLogin={() => setAuthView('login')}
+      />
+    )
+  }
+
+  if (sessionUser.role === 'master' && !sessionUser.impersonatingCompanyId) {
     return (
       <MasterDashboard
-        user={user}
+        user={sessionUser}
         companies={companies}
         onCreateCompany={handleCreateCompany}
         onOpenCompany={(company) => {
           resetWorkspaceView()
-          setUser({ ...user, impersonatingCompanyId: company.id })
+          setImpersonatingCompanyId(company.id)
         }}
-        onLogout={() => {
-          resetWorkspaceView()
-          setUser(null)
-        }}
+        onLogout={handleLogout}
       />
     )
   }
@@ -229,8 +341,7 @@ function App() {
 
   return (
     <div className="h-screen w-screen flex flex-col">
-      {/* Impersonation banner (only when master is viewing as a company) */}
-      {user.role === 'master' && impersonatedCompany && (
+      {sessionUser.role === 'master' && impersonatedCompany && (
         <div className="bg-amber-500 text-amber-950 px-4 py-2 flex items-center justify-between text-sm font-medium">
           <div className="flex items-center gap-2">
             👁️ Viewing as <span className="font-bold">{impersonatedCompany.name}</span>
@@ -239,7 +350,7 @@ function App() {
           <button
             onClick={() => {
               resetWorkspaceView()
-              setUser({ ...user, impersonatingCompanyId: null })
+              setImpersonatingCompanyId(null)
             }}
             className="px-3 py-1 bg-amber-950 text-amber-50 rounded-lg text-xs font-semibold hover:bg-amber-900"
           >
@@ -249,16 +360,15 @@ function App() {
       )}
 
       <TopBar
-        user={impersonatedCompany ? { ...user, name: impersonatedCompany.contact, role: 'admin' } : user}
+        user={
+          impersonatedCompany
+            ? { ...sessionUser, name: impersonatedCompany.contact, role: 'admin' }
+            : sessionUser
+        }
         impersonating={impersonatedCompany}
         enabledFeatures={enabledFeatures}
         onOpen={setOverlay}
-        onLogout={() => {
-          resetWorkspaceView()
-          setUser(null)
-          setSelected(null)
-          setOverlay(null)
-        }}
+        onLogout={handleLogout}
       />
 
       <div className="flex-1 flex min-h-0">
@@ -279,15 +389,11 @@ function App() {
             setDrawMode(null)
             setDraftZone(null)
           }}
-          onDeleteZone={(id) => setZones((z) => z.filter((zone) => zone.id !== id))}
+          onDeleteZone={(id) => setZones((currentZones) => currentZones.filter((zone) => zone.id !== id))}
         />
 
         <div className="flex-1 h-full relative">
-          <MapContainer
-            center={center}
-            zoom={11}
-            style={{ height: '100%', width: '100%' }}
-          >
+          <MapContainer center={center} zoom={11} style={{ height: '100%', width: '100%' }}>
             <TileLayer
               attribution='&copy; OpenStreetMap contributors'
               url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -295,7 +401,6 @@ function App() {
 
             <FlyToVehicle vehicle={selected} />
 
-            {/* Zone drawing handler (only listens during draw mode) */}
             {drawMode && zonesEnabled && (
               <ZoneDrawHandler
                 drawMode={drawMode}
@@ -306,7 +411,6 @@ function App() {
               />
             )}
 
-            {/* Draft zone preview while drawing */}
             {draftZone && zonesEnabled && (
               <Circle
                 center={[draftZone.lat, draftZone.lng]}
@@ -321,7 +425,6 @@ function App() {
               />
             )}
 
-            {/* Saudi country border (visual outline for country-wide vehicles) */}
             {zonesEnabled && (
               <Polygon
                 positions={saudiBorder}
@@ -335,20 +438,17 @@ function App() {
               />
             )}
 
-            {/* Playback route */}
             {route && route.points.length > 0 && (
               <>
                 <Polyline
-                  positions={route.points.map((p) => [p.lat, p.lng])}
+                  positions={route.points.map((point) => [point.lat, point.lng])}
                   pathOptions={{ color: '#2563eb', weight: 4, opacity: 0.8 }}
                 />
-                {/* Start marker */}
                 <Circle
                   center={[route.points[0].lat, route.points[0].lng]}
                   radius={40}
                   pathOptions={{ color: '#16a34a', fillColor: '#16a34a', fillOpacity: 0.8 }}
                 />
-                {/* End marker */}
                 <Circle
                   center={[
                     route.points[route.points.length - 1].lat,
@@ -357,7 +457,6 @@ function App() {
                   radius={40}
                   pathOptions={{ color: '#dc2626', fillColor: '#dc2626', fillOpacity: 0.8 }}
                 />
-                {/* Playback marker (moving car) */}
                 {route.points[playbackIndex] && (
                   <Marker
                     position={[
@@ -368,16 +467,14 @@ function App() {
                   >
                     <Popup>
                       <div style={{ fontSize: '13px' }}>
-                        <div style={{ fontWeight: 'bold' }}>
-                          {route.vehicle?.name}
-                        </div>
+                        <div style={{ fontWeight: 'bold' }}>{route.vehicle?.name}</div>
                         <div>⚡ Speed: {route.points[playbackIndex].speed} km/h</div>
                         <div>
                           🕒{' '}
-                          {new Date(route.points[playbackIndex].time).toLocaleTimeString(
-                            [],
-                            { hour: '2-digit', minute: '2-digit' }
-                          )}
+                          {new Date(route.points[playbackIndex].time).toLocaleTimeString([], {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })}
                         </div>
                       </div>
                     </Popup>
@@ -386,7 +483,6 @@ function App() {
               </>
             )}
 
-            {/* Zones */}
             {visibleZones.map((zone) => (
               <Circle
                 key={zone.id}
@@ -413,7 +509,6 @@ function App() {
               </Circle>
             ))}
 
-            {/* Vehicles */}
             {vehicles.map((vehicle) => (
               <Marker
                 key={vehicle.id}
@@ -432,7 +527,12 @@ function App() {
                     <div>⚡ Speed: {vehicle.speed} km/h</div>
                     <div>
                       🔑 Engine:{' '}
-                      <span style={{ color: vehicle.engineOn ? '#16a34a' : '#dc2626', fontWeight: 'bold' }}>
+                      <span
+                        style={{
+                          color: vehicle.engineOn ? '#16a34a' : '#dc2626',
+                          fontWeight: 'bold',
+                        }}
+                      >
                         {vehicle.engineOn ? 'ON' : 'OFF'}
                       </span>
                     </div>
@@ -459,17 +559,12 @@ function App() {
         )}
       </div>
 
-      {/* Drawing mode banner */}
       {drawMode && zonesEnabled && (
         <div className="fixed top-16 left-1/2 -translate-x-1/2 z-[1500] bg-blue-600 text-white px-4 py-2 rounded-full shadow-lg text-sm font-medium flex items-center gap-3">
           {drawMode === 'pickCenter' ? (
-            <>
-              📍 Click on the map to place the zone center
-            </>
+            <>📍 Click on the map to place the zone center</>
           ) : (
-            <>
-              ⭕ Move your mouse to size it, click to confirm
-            </>
+            <>⭕ Move your mouse to size it, click to confirm</>
           )}
           <button
             onClick={() => {
@@ -483,12 +578,11 @@ function App() {
         </div>
       )}
 
-      {/* Save zone dialog */}
       {showZoneDialog && zonesEnabled && (
         <ZoneSaveDialog
           draftZone={draftZone}
           onSave={(newZone) => {
-            setZones((z) => [...z, newZone])
+            setZones((currentZones) => [...currentZones, newZone])
             setDraftZone(null)
             setShowZoneDialog(false)
             setDrawMode(null)
@@ -501,7 +595,6 @@ function App() {
         />
       )}
 
-      {/* Zone violation toast */}
       {zoneToast && (
         <div className="fixed bottom-6 right-6 z-[2000] bg-amber-500 text-white rounded-xl shadow-2xl px-4 py-3 max-w-sm flex items-start gap-3 animate-pulse">
           <div className="text-2xl">🚨</div>
@@ -518,17 +611,13 @@ function App() {
         </div>
       )}
 
-      {/* Overlays */}
       {overlay === 'alerts' && alertsEnabled && (
-        <AlertsPanel
-          onClose={() => setOverlay(null)}
-          onSelectVehicle={(v) => setSelected(v)}
-        />
+        <AlertsPanel onClose={() => setOverlay(null)} onSelectVehicle={(vehicle) => setSelected(vehicle)} />
       )}
       {overlay === 'maintenance' && maintenanceEnabled && (
         <MaintenancePanel
           onClose={() => setOverlay(null)}
-          onSelectVehicle={(v) => setSelected(v)}
+          onSelectVehicle={(vehicle) => setSelected(vehicle)}
         />
       )}
       {overlay === 'customers' && customersEnabled && (
@@ -537,8 +626,8 @@ function App() {
       {overlay === 'playback' && playbackEnabled && (
         <PlaybackPanel
           onClose={() => setOverlay(null)}
-          onLoadRoute={(r) => {
-            setRoute(r)
+          onLoadRoute={(nextRoute) => {
+            setRoute(nextRoute)
             setIsPlaying(false)
             setPlaybackIndex(0)
           }}
@@ -550,17 +639,18 @@ function App() {
           }}
           playbackIndex={playbackIndex}
           isPlaying={isPlaying}
-          onTogglePlay={() => setIsPlaying((p) => !p)}
-          onSeek={(i) => setPlaybackIndex(i)}
+          onTogglePlay={() => setIsPlaying((playing) => !playing)}
+          onSeek={(index) => setPlaybackIndex(index)}
           playSpeed={playSpeed}
           onChangeSpeed={setPlaySpeed}
         />
       )}
       {overlay === 'account' && (
         <AccountSettings
-          user={user}
+          user={sessionUser}
           onClose={() => setOverlay(null)}
-          onSave={(updatedUser) => setUser(updatedUser)}
+          onSave={handleSaveUser}
+          onChangePassword={handleChangePassword}
         />
       )}
     </div>

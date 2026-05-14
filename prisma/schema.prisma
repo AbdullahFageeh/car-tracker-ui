@@ -1,0 +1,74 @@
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum UserRole {
+  master
+  admin
+}
+
+enum CompanyStatus {
+  active
+  trial
+  suspended
+}
+
+model Company {
+  id                          String        @id @default(cuid())
+  name                        String
+  logo                        String?
+  contact                     String
+  email                       String
+  phone                       String
+  city                        String
+  plan                        String
+  monthlyFee                  Int
+  vehicleCount                Int
+  vehicleLimit                Int
+  status                      CompanyStatus @default(trial)
+  templateId                  String
+  devicePackageId             String
+  trackingDeviceUnitPrice     Int
+  dashcamUnitPrice            Int
+  yearlySubscriptionUnitPrice Int
+  enabledFeatures             Json
+  createdAt                   DateTime      @default(now())
+  updatedAt                   DateTime      @updatedAt
+  lastActiveAt                DateTime?
+  users                       User[]
+}
+
+model User {
+  id           String    @id @default(cuid())
+  name         String
+  email        String    @unique
+  passwordHash String
+  role         UserRole
+  phone        String?
+  language     String    @default("en")
+  timezone     String    @default("Asia/Riyadh")
+  units        String    @default("metric")
+  companyId    String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  company      Company?  @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  sessions     Session[]
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  lastSeenAt DateTime @default(now())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}

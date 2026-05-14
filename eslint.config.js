@@ -5,17 +5,29 @@ import reactRefresh from 'eslint-plugin-react-refresh'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
-  globalIgnores(['dist']),
+  globalIgnores(['dist', 'prisma/*.db', 'prisma/*.db-journal']),
   {
     files: ['**/*.{js,jsx}'],
+    extends: [js.configs.recommended],
+    languageOptions: {
+      parserOptions: { ecmaFeatures: { jsx: true } },
+    },
+  },
+  {
+    files: ['src/**/*.{js,jsx}'],
     extends: [
-      js.configs.recommended,
       reactHooks.configs.flat.recommended,
       reactRefresh.configs.vite,
     ],
     languageOptions: {
       globals: globals.browser,
       parserOptions: { ecmaFeatures: { jsx: true } },
+    },
+  },
+  {
+    files: ['server/**/*.js', 'prisma/**/*.js', '*.config.js'],
+    languageOptions: {
+      globals: globals.node,
     },
   },
 ])
