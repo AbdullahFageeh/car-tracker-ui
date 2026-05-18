@@ -253,10 +253,7 @@ export default function MasterDashboard({
       {showAddCompany && (
         <AddCompanyModal
           onClose={() => setShowAddCompany(false)}
-          onCreateCompany={(company) => {
-            onCreateCompany(company)
-            setShowAddCompany(false)
-          }}
+          onCreateCompany={onCreateCompany}
         />
       )}
     </div>

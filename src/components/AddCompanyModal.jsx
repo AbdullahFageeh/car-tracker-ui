@@ -22,6 +22,7 @@ const planOptions = Object.keys(planCatalog)
 
 export default function AddCompanyModal({ onClose, onCreateCompany }) {
   const [error, setError] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const [form, setForm] = useState({
     name: '',
     contact: '',
@@ -36,6 +37,7 @@ export default function AddCompanyModal({ onClose, onCreateCompany }) {
     dashcamUnitPrice: firstDevicePackage.defaultPricing.dashcamUnitPrice,
     yearlySubscriptionUnitPrice: firstDevicePackage.defaultPricing.yearlySubscriptionUnitPrice,
     enabledFeatures: getDefaultFeaturesForTemplate(firstTemplate.id),
+    password: '',
   })
 
   const selectedTemplate = getTemplateById(form.templateId)
@@ -106,7 +108,7 @@ export default function AddCompanyModal({ onClose, onCreateCompany }) {
     updateField('enabledFeatures', getDefaultFeaturesForTemplate(form.templateId))
   }
 
-  const handleSubmit = (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault()
 
     if (
@@ -121,19 +123,34 @@ export default function AddCompanyModal({ onClose, onCreateCompany }) {
       return
     }
 
-    onCreateCompany({
-      ...form,
-      name: form.name.trim(),
-      contact: form.contact.trim(),
-      email: form.email.trim(),
-      phone: form.phone.trim(),
-      city: form.city.trim(),
-      vehicleCount: Math.max(Number(form.vehicleCount) || 0, 1),
-      trackingDeviceUnitPrice: Math.max(Number(form.trackingDeviceUnitPrice) || 0, 0),
-      dashcamUnitPrice: Math.max(Number(form.dashcamUnitPrice) || 0, 0),
-      yearlySubscriptionUnitPrice: Math.max(Number(form.yearlySubscriptionUnitPrice) || 0, 0),
-      enabledFeatures: orderedFeatureIds(form.enabledFeatures),
-    })
+    if ((form.password || '').trim().length < 6) {
+      setError('Choose an admin password with at least 6 characters.')
+      return
+    }
+
+    setIsSubmitting(true)
+
+    try {
+      await onCreateCompany({
+        ...form,
+        name: form.name.trim(),
+        contact: form.contact.trim(),
+        email: form.email.trim(),
+        phone: form.phone.trim(),
+        city: form.city.trim(),
+        password: form.password.trim(),
+        vehicleCount: Math.max(Number(form.vehicleCount) || 0, 1),
+        trackingDeviceUnitPrice: Math.max(Number(form.trackingDeviceUnitPrice) || 0, 0),
+        dashcamUnitPrice: Math.max(Number(form.dashcamUnitPrice) || 0, 0),
+        yearlySubscriptionUnitPrice: Math.max(Number(form.yearlySubscriptionUnitPrice) || 0, 0),
+        enabledFeatures: orderedFeatureIds(form.enabledFeatures),
+      })
+      onClose()
+    } catch (createError) {
+      setError(createError.message || 'We could not create this company right now.')
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   return (
@@ -373,10 +390,25 @@ export default function AddCompanyModal({ onClose, onCreateCompany }) {
           </section>
 
           <section>
+            <h3 className="text-sm font-bold uppercase tracking-wider text-slate-500 mb-3">
+              4. Admin password
+            </h3>
+            <div className="max-w-md">
+              <Field
+                label="Initial admin password"
+                type="password"
+                value={form.password}
+                onChange={(value) => updateField('password', value)}
+                placeholder="At least 6 characters"
+              />
+            </div>
+          </section>
+
+          <section>
             <div className="flex items-center justify-between gap-3 mb-3">
               <div>
                 <h3 className="text-sm font-bold uppercase tracking-wider text-slate-500">
-                  4. Adjust features
+                  5. Adjust features
                 </h3>
                 <p className="text-sm text-slate-500 mt-1">
                   Turn modules on or off before creating the company.
@@ -459,10 +491,11 @@ export default function AddCompanyModal({ onClose, onCreateCompany }) {
             <button
               type="submit"
               form="add-company-form"
-              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-medium"
+              disabled={isSubmitting}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-70 text-white font-medium"
             >
               <Plus size={16} />
-              Create company
+              {isSubmitting ? 'Creating…' : 'Create company'}
             </button>
           </div>
         </div>

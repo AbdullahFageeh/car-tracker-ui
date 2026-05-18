@@ -1,43 +1,48 @@
 import { useState } from 'react'
 import { Car, Lock, User, Shield, Building2 } from 'lucide-react'
 
-export default function Login({ onLogin }) {
-  const [accountType, setAccountType] = useState('company') // 'master' | 'company'
-  const [email, setEmail] = useState('admin@riyadhrentals.com')
+const COMPANY_DEMO_EMAIL = 'admin@riyadhrentals.com'
+const MASTER_DEMO_EMAIL = 'master@platform.com'
+
+export default function Login({ onBack, onLogin }) {
+  const [accountType, setAccountType] = useState('company')
+  const [email, setEmail] = useState(COMPANY_DEMO_EMAIL)
   const [password, setPassword] = useState('demo123')
   const [error, setError] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   const switchType = (type) => {
     setAccountType(type)
-    setEmail(type === 'master' ? 'master@platform.com' : 'admin@riyadhrentals.com')
+    setEmail(type === 'master' ? MASTER_DEMO_EMAIL : COMPANY_DEMO_EMAIL)
+    setPassword('demo123')
+    setError('')
   }
 
-  const handleSubmit = (e) => {
-    e.preventDefault()
+  const handleSubmit = async (event) => {
+    event.preventDefault()
+
     if (!email || !password) {
       setError('Please enter email and password')
       return
     }
-    // Fake login — backend will replace this
-    if (accountType === 'master') {
-      onLogin({
-        name: 'Platform Admin',
+
+    setIsSubmitting(true)
+
+    try {
+      await onLogin({
+        accountType,
         email,
-        role: 'master',
+        password,
       })
-    } else {
-      onLogin({
-        name: 'Fleet Manager',
-        email,
-        role: 'admin',
-        companyId: 'co_1', // Riyadh Rentals (demo)
-      })
+    } catch (loginError) {
+      setError(loginError.message || 'Incorrect email or password')
+    } finally {
+      setIsSubmitting(false)
     }
   }
 
   return (
     <div className="h-screen w-screen flex bg-slate-900">
-      {/* Left side — branding */}
       <div className="hidden md:flex flex-1 bg-gradient-to-br from-blue-600 to-blue-900 text-white items-center justify-center p-12">
         <div className="max-w-md">
           <div className="flex items-center gap-3 mb-6">
@@ -62,23 +67,28 @@ export default function Login({ onLogin }) {
         </div>
       </div>
 
-      {/* Right side — login form */}
       <div className="flex-1 flex items-center justify-center p-6">
         <form
           onSubmit={handleSubmit}
           className="w-full max-w-md bg-white rounded-2xl p-8 shadow-2xl"
         >
+          {onBack && (
+            <button
+              type="button"
+              onClick={onBack}
+              className="text-sm text-blue-600 hover:underline mb-6"
+            >
+              ← Back to site
+            </button>
+          )}
           <div className="md:hidden flex items-center gap-2 mb-6 text-slate-900">
             <Car size={28} />
             <span className="text-2xl font-bold">Fleet Tracker</span>
           </div>
 
           <h2 className="text-2xl font-bold text-slate-900 mb-1">Welcome back</h2>
-          <p className="text-slate-500 text-sm mb-5">
-            Sign in to your dashboard
-          </p>
+          <p className="text-slate-500 text-sm mb-5">Sign in to your dashboard</p>
 
-          {/* Account type toggle */}
           <div className="grid grid-cols-2 gap-2 mb-5 p-1 bg-slate-100 rounded-xl">
             <button
               type="button"
@@ -106,9 +116,7 @@ export default function Login({ onLogin }) {
             </button>
           </div>
 
-          <label className="block text-xs font-medium text-slate-700 mb-1.5">
-            Email
-          </label>
+          <label className="block text-xs font-medium text-slate-700 mb-1.5">Email</label>
           <div className="relative mb-4">
             <User
               size={16}
@@ -117,15 +125,13 @@ export default function Login({ onLogin }) {
             <input
               type="email"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(event) => setEmail(event.target.value)}
               className="w-full pl-9 pr-3 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
               placeholder="you@company.com"
             />
           </div>
 
-          <label className="block text-xs font-medium text-slate-700 mb-1.5">
-            Password
-          </label>
+          <label className="block text-xs font-medium text-slate-700 mb-1.5">Password</label>
           <div className="relative mb-2">
             <Lock
               size={16}
@@ -134,7 +140,7 @@ export default function Login({ onLogin }) {
             <input
               type="password"
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              onChange={(event) => setPassword(event.target.value)}
               className="w-full pl-9 pr-3 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
               placeholder="••••••••"
             />
@@ -158,13 +164,15 @@ export default function Login({ onLogin }) {
 
           <button
             type="submit"
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 rounded-lg transition-colors"
+            disabled={isSubmitting}
+            className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-70 text-white font-medium py-2.5 rounded-lg transition-colors"
           >
-            Sign in
+            {isSubmitting ? 'Signing in…' : 'Sign in'}
           </button>
 
           <div className="text-center text-xs text-slate-500 mt-6">
-            Demo credentials are pre-filled. Just click Sign in.
+            Seeded demo credentials are pre-filled. New trial accounts now use the backend
+            database and session cookie.
           </div>
         </form>
       </div>
